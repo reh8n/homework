@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Homework</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="drag"></div>
+  <aside class="sidebar">
+    <nav>
+      <span class="thumb nav-thumb"></span>
+      <button class="nav active" data-view="today"><span class="ico">◐</span>Today</button>
+      <button class="nav" data-view="upcoming"><span class="ico">◷</span>Upcoming</button>
+      <button class="nav" data-view="done"><span class="ico">✓</span>Done</button>
+      <button class="nav" data-view="subjects"><span class="ico">▤</span>Subjects</button>
+      <button class="nav" data-view="settings"><span class="ico">⚙</span>Settings</button>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div>
+        <p class="eyebrow" id="eyebrow"></p>
+        <h1 id="title">Today</h1>
+      </div>
+      <div class="pill-toggle" id="groupToggle">
+        <span class="thumb"></span>
+        <button data-group="date" class="on">Date</button>
+        <button data-group="subject">Subject</button>
+      </div>
+    </header>
+
+    <section class="card" id="listCard">
+      <div id="list"></div>
+      <div id="subjectsView" hidden></div>
+      <div id="settingsView" hidden>
+        <div class="setting">
+          <span class="name">Appearance</span>
+          <div class="pill-toggle" id="themeToggle">
+            <span class="thumb"></span>
+            <button data-theme="system">System</button>
+            <button data-theme="light">Light</button>
+            <button data-theme="dark">Dark</button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="name">Open at login</span>
+          <div class="pill-toggle" id="loginToggle">
+            <span class="thumb"></span>
+            <button data-login="on">On</button>
+            <button data-login="off">Off</button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="name">Subjects</span>
+          <button class="soft" id="goSubjects">Manage subjects</button>
+        </div>
+        <p class="hint">Reminders arrive at 7pm the evening before a task is due. Closing the window keeps Homework running in the menu bar; choose Quit from its menu-bar icon to stop reminders.</p>
+      </div>
+    </section>
+
+    <form class="bar" id="addForm" autocomplete="off">
+      <input class="field grow" id="fTitle" placeholder="Add a task…" required>
+      <select class="field" id="fSubject"></select>
+      <select class="field" id="fType">
+        <option>Homework</option><option>Test</option><option>Project</option>
+      </select>
+      <input class="field" type="date" id="fDue" required>
+      <button class="round" type="submit" title="Add">+</button>
+    </form>
+  </main>
+
+  <dialog id="editDialog" class="card">
+    <form method="dialog" id="editForm">
+      <input class="field" id="eTitle" required>
+      <div class="row">
+        <select class="field" id="eSubject"></select>
+        <select class="field" id="eType"><option>Homework</option><option>Test</option><option>Project</option></select>
+        <input class="field" type="date" id="eDue" required>
+      </div>
+      <textarea class="field" id="eNotes" rows="4" placeholder="Notes"></textarea>
+      <div class="row end">
+        <button class="soft" value="delete" id="eDelete" formnovalidate>Delete</button>
+        <button class="soft" value="cancel" formnovalidate>Cancel</button>
+        <button class="soft strong" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

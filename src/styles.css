@@ -1,0 +1,188 @@
+/* Neumorphic theme — all colours live here so a dark theme is one extra block */
+:root {
+  --bg: #E4E8EE;
+  --text: #4A5160;
+  --muted: #8A919E;
+  --light: #FFFFFF;
+  --shadow: #BEC5D0;
+  /* Every shadow has the same four layers (two outer, two inset) so raised <-> pressed can animate */
+  --raised: 6px 6px 14px var(--shadow), -6px -6px 14px var(--light), inset 0 0 0 transparent, inset 0 0 0 transparent;
+  --raised-sm: 3px 3px 7px var(--shadow), -3px -3px 7px var(--light), inset 0 0 0 transparent, inset 0 0 0 transparent;
+  --inset: 0 0 0 transparent, 0 0 0 transparent, inset 3px 3px 7px var(--shadow), inset -3px -3px 7px var(--light);
+  --flat: 0 0 0 transparent, 0 0 0 transparent, inset 0 0 0 transparent, inset 0 0 0 transparent;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --radius: 22px;
+  --late: #C27A7A;
+  --veil: rgba(228, 232, 238, .6);
+  color-scheme: light;
+}
+
+/* Dark: follows macOS unless Settings forces a theme */
+:root[data-theme=dark] {
+  --bg: #2B2E33;
+  --text: #D5D9E0;
+  --muted: #8C929C;
+  --light: #363A40;
+  --shadow: #1F2125;
+  --late: #D98E8E;
+  --veil: rgba(43, 46, 51, .6);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) {
+    --bg: #2B2E33;
+    --text: #D5D9E0;
+    --muted: #8C929C;
+    --light: #363A40;
+    --shadow: #1F2125;
+    --late: #D98E8E;
+    --veil: rgba(43, 46, 51, .6);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+body {
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  overflow: hidden;
+  user-select: none;
+}
+
+.drag { position: fixed; inset: 0 0 auto 0; height: 36px; -webkit-app-region: drag; }
+
+button, input, select, textarea { font: inherit; color: inherit; border: 0; background: none; outline: none; }
+button { cursor: pointer; }
+button, .field, .task, .check {
+  box-shadow: var(--flat);
+  transition: box-shadow .22s var(--ease), transform .22s var(--ease), color .22s var(--ease), opacity .3s var(--ease);
+}
+
+/* Sliding highlight behind the active sidebar item / pill option */
+.thumb { position: absolute; top: 0; left: 0; pointer-events: none; transition: transform .32s var(--ease), width .32s var(--ease); }
+#groupToggle.gone, #addForm.gone { opacity: 0; transform: translateY(4px); pointer-events: none; visibility: hidden; transition: opacity .2s var(--ease), transform .2s var(--ease), visibility 0s .2s; }
+#groupToggle, #addForm { transition: opacity .25s var(--ease), transform .25s var(--ease); }
+
+/* Sidebar */
+.sidebar { padding: 70px 18px; }
+.sidebar nav { position: relative; }
+.nav-thumb { border-radius: 10px; box-shadow: var(--inset); }
+.nav {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px; margin-bottom: 8px;
+  border-radius: 10px; color: var(--muted); text-align: left;
+}
+.nav .ico { width: 16px; text-align: center; opacity: .8; }
+.nav:hover { color: var(--text); }
+.nav.active { color: var(--text); }
+
+/* Main */
+main { display: flex; flex-direction: column; gap: 22px; padding: 46px 40px 30px 10px; min-height: 0; }
+
+.top { display: flex; justify-content: space-between; align-items: flex-end; }
+.eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+h1 { font-size: 22px; font-weight: 500; letter-spacing: .02em; }
+
+.card { background: var(--bg); border-radius: var(--radius); box-shadow: var(--raised); }
+#listCard { flex: 1; padding: 22px 26px; overflow-y: auto; }
+
+.pill-toggle { position: relative; display: flex; padding: 4px; border-radius: 999px; box-shadow: var(--inset); }
+.pill-toggle button { position: relative; z-index: 1; padding: 5px 14px; border-radius: 999px; color: var(--muted); }
+.pill-toggle button.on { color: var(--text); }
+.pill-toggle .thumb { border-radius: 999px; box-shadow: var(--raised-sm); }
+
+/* Groups and tasks */
+.group + .group { margin-top: 20px; }
+.group h2 { font-size: 11px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.group h2.late { color: var(--late); }
+
+.task { display: flex; align-items: center; gap: 14px; padding: 9px 6px; border-radius: 12px; cursor: default; }
+.task:hover { box-shadow: var(--raised-sm); }
+
+.check {
+  flex: none; width: 22px; height: 22px; border-radius: 50%;
+  box-shadow: var(--raised-sm); display: grid; place-items: center;
+}
+.check:active { transform: scale(.88); }
+.task.done .check { box-shadow: var(--inset); transform: scale(.94); }
+/* Tick draws itself, then the strike sweeps left to right */
+.check svg {
+  width: 12px; height: 12px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset .3s var(--ease) .06s;
+}
+.task.done .check svg { stroke-dashoffset: 0; }
+.strike { position: relative; transition: color .3s var(--ease); }
+.strike::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 52%; height: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: left; transition: transform .34s var(--ease) .12s;
+}
+.task.done .strike { color: var(--muted); }
+.task.done .strike::after { transform: scaleX(1); }
+.task.done { opacity: .6; }
+#list { position: relative; }
+
+.name { flex: 1; }
+.meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.chip { padding: 2px 9px; border-radius: 999px; box-shadow: var(--inset); font-size: 11px; }
+.note-mark { font-size: 11px; }
+
+.empty { color: var(--muted); text-align: center; padding: 60px 0; }
+
+/* Add bar — like the control strip in the reference */
+.bar { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 18px; box-shadow: var(--raised); }
+.field { padding: 8px 12px; border-radius: 10px; box-shadow: var(--inset); min-width: 0; }
+.field.grow { flex: 1; }
+select.field { -webkit-appearance: none; padding-right: 14px; }
+input[type=date].field { width: 130px; }
+.round { width: 34px; height: 34px; border-radius: 50%; box-shadow: var(--raised-sm); font-size: 18px; flex: none; }
+.round:active, .soft:active { box-shadow: var(--inset); transform: scale(.97); }
+
+/* Subjects view */
+.subject-row { display: flex; align-items: center; gap: 12px; padding: 8px 6px; }
+.subject-row .name { flex: 1; }
+.swatches { display: flex; gap: 6px; }
+.swatches button { width: 14px; height: 14px; border-radius: 50%; }
+.swatches button.sel { outline: 2px solid var(--muted); outline-offset: 2px; }
+.soft { padding: 6px 14px; border-radius: 10px; box-shadow: var(--raised-sm); color: var(--muted); }
+.soft.strong { color: var(--text); }
+.add-subject { display: flex; gap: 12px; margin-top: 16px; }
+
+/* Edit dialog */
+dialog { margin: auto; border: 0; padding: 22px; width: 460px; color: var(--text); }
+dialog::backdrop { background: var(--veil); backdrop-filter: blur(3px); }
+dialog[open] { animation: dlg-in .26s var(--ease); }
+dialog[open]::backdrop { animation: fade-in .26s var(--ease); }
+dialog.closing { animation: dlg-out .18s var(--ease) forwards; }
+dialog.closing::backdrop { animation: fade-out .18s var(--ease) forwards; }
+@keyframes dlg-in { from { opacity: 0; transform: translateY(8px) scale(.96); } }
+@keyframes dlg-out { to { opacity: 0; transform: translateY(4px) scale(.97); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+#editForm { display: flex; flex-direction: column; gap: 14px; }
+#editForm .row { display: flex; gap: 10px; }
+#editForm .row .field { flex: 1; }
+#editForm .row.end { justify-content: flex-end; }
+#eDelete { margin-right: auto; color: var(--late); }
+textarea.field { resize: none; user-select: text; }
+
+/* Subject rename field looks like plain text until focused */
+.rename { padding: 4px 8px; border-radius: 8px; user-select: text; }
+.rename:focus { box-shadow: var(--inset); }
+
+/* Settings view */
+.setting { display: flex; align-items: center; justify-content: space-between; padding: 12px 6px; }
+.hint { color: var(--muted); font-size: 12px; padding: 18px 6px 0; }
+
+/* Theme switch crossfades the whole window */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .35s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, ::backdrop { transition-duration: 1ms !important; animation-duration: 1ms !important; transition-delay: 0s !important; }
+}

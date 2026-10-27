@@ -1,0 +1,32 @@
+{
+  "name": "homework",
+  "productName": "Homework",
+  "version": "1.2.2",
+  "description": "A minimal school to-do list",
+  "main": "src/main.js",
+  "author": "reh8n",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg --arm64"
+  },
+  "build": {
+    "appId": "com.reh8n.homework",
+    "productName": "Homework",
+    "files": [
+      "src/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": "dmg",
+      "identity": null,
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "title": "Homework"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}
