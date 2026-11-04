@@ -1,13 +1,17 @@
 const COLORS = ['#8FA9C9', '#A9C2A4', '#D3B58C', '#C9A0B4', '#A79CC9', '#9FC4C4', '#C9A09A'];
 const DAY = 86400000;
 const SETTLE = 550; // let the tick and strike finish drawing before the row leaves its view
+const HOUR = 44; // px per hour in the calendar grid
 
-let data = { tasks: [], subjects: [], settings: {} };
+let data = { tasks: [], subjects: [], settings: {}, timetable: [], meetings: [] };
 let view = 'today';
 let group = 'date';
 let editing = null;
 let lastView = null;
 const leaving = new Map(); // task id -> timer for a row about to move between the list and Done
+let weekStart = null; // Monday of the week the calendar shows
+let cal = { week: null, access: null, events: [], reminders: [], error: null }; // last read of Apple Calendar and Reminders
+let slotEditing = null;
 
 const EASE = 'cubic-bezier(.2, .8, .2, 1)';
 const motion = () => !matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -218,14 +222,18 @@ function fillSubjectSelect(select, value = '') {
 function render() {
   const subjects = view === 'subjects';
   const settings = view === 'settings';
-  const page = subjects || settings;
-  $('title').textContent = { today: 'Today', upcoming: 'Upcoming', done: 'Done', subjects: 'Subjects', settings: 'Settings' }[view];
-  $('eyebrow').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const calendar = view === 'calendar';
+  const page = subjects || settings || calendar;
+  $('title').textContent = { today: 'Today', upcoming: 'Upcoming', calendar: 'Calendar', done: 'Done', subjects: 'Subjects', settings: 'Settings' }[view];
+  $('eyebrow').textContent = calendar ? weekLabel() : new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
   $('list').hidden = page;
   $('subjectsView').hidden = !subjects;
   $('settingsView').hidden = !settings;
+  $('calendarView').hidden = !calendar;
   $('groupToggle').classList.toggle('gone', page);
+  $('weekNav').classList.toggle('gone', !calendar);
   $('addForm').classList.toggle('gone', page || view === 'done');
+  $('calForm').classList.toggle('gone', !calendar);
   document.querySelectorAll('.nav').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('#groupToggle button').forEach(b => b.classList.toggle('on', b.dataset.group === group));
 
@@ -234,11 +242,16 @@ function render() {
   const first = lastView === null, moved = !first && view !== lastView;
   lastView = view;
   if (subjects) renderSubjects();
+  else if (calendar) {
+    if (moved) $('listCard').scrollTop = 0;
+    renderCalendar();
+    if (moved || first) refreshCalendar();
+  }
   else if (!settings) renderList(first ? 'enter' : moved ? 'none' : 'flip');
   syncThumbs();
   // Changing views: the new page eases in
   if (moved && motion()) {
-    const pane = subjects ? $('subjectsView') : settings ? $('settingsView') : $('list');
+    const pane = subjects ? $('subjectsView') : settings ? $('settingsView') : calendar ? $('calendarView') : $('list');
     for (const n of [pane, $('title')]) n.animate(ENTER, { duration: 280, easing: EASE });
   }
 }
@@ -266,8 +279,7 @@ function openEdit(t) {
   $('editDialog').showModal();
 }
 
-function closeEdit(value) {
-  const dlg = $('editDialog');
+function closeDialog(dlg, value) {
   if (!motion()) return dlg.close(value);
   dlg.classList.add('closing');
   dlg.addEventListener('animationend', function done(e) {
@@ -277,8 +289,10 @@ function closeEdit(value) {
     dlg.close(value);
   });
 }
-$('editForm').addEventListener('submit', e => { e.preventDefault(); closeEdit(e.submitter ? e.submitter.value : ''); });
-$('editDialog').addEventListener('cancel', e => { e.preventDefault(); closeEdit('cancel'); });
+for (const [form, dlg] of [['editForm', 'editDialog'], ['slotForm', 'slotDialog']]) {
+  $(form).addEventListener('submit', e => { e.preventDefault(); closeDialog($(dlg), e.submitter ? e.submitter.value : ''); });
+  $(dlg).addEventListener('cancel', e => { e.preventDefault(); closeDialog($(dlg), 'cancel'); });
+}
 
 $('editDialog').addEventListener('close', () => {
   const action = $('editDialog').returnValue;
@@ -338,10 +352,234 @@ document.querySelectorAll('#loginToggle button').forEach(b => b.addEventListener
   save(); applyLogin();
 }));
 window.store.onFocusAdd(() => {
-  if (view === 'subjects' || view === 'settings' || view === 'done') { view = 'today'; render(); }
+  if (view !== 'today' && view !== 'upcoming') { view = 'today'; render(); }
   $('fTitle').focus();
 });
 $('goSubjects').addEventListener('click', () => { view = 'subjects'; render(); });
+
+// Tasks also live in the "Homework" Reminders list; a tick made on the iPhone arrives here
+window.store.onRemoteTasks(changes => {
+  for (const [id, done] of Object.entries(changes)) {
+    const t = data.tasks.find(x => x.id === id);
+    if (!t || t.done === done) continue;
+    t.done = done;
+    t.doneAt = done ? Date.now() : null;
+    if (leaving.has(id)) { clearTimeout(leaving.get(id)); leaving.delete(id); }
+  }
+  save();
+  if (view !== 'subjects' && view !== 'settings' && view !== 'calendar' && !editing) render();
+});
+function applySync(access) {
+  $('syncState').textContent = {
+    granted: 'On, in Reminders → Homework',
+    denied: 'Off. Allow Homework in System Settings → Privacy & Security → Reminders.',
+    undetermined: 'Starts once you open Calendar and allow Reminders'
+  }[access] || 'Starting…';
+}
+window.store.onSyncStatus(applySync);
+window.store.syncStatus().then(applySync);
+
+
+// Calendar: the user's weekly timetable and one-off meetings (kept in tasks.json), plus Apple Calendar
+// events and dated reminders read through the Swift helper. Weeks start on Monday.
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const minutes = hm => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
+const clock = mins => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+const dayIndex = d => Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - weekStart) / DAY);
+
+function mondayOf(d) {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  m.setDate(m.getDate() - (m.getDay() + 6) % 7);
+  return m;
+}
+
+function weekLabel() {
+  const fmt = d => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return `${fmt(weekStart)} – ${fmt(addDays(weekStart, 6))}`;
+}
+
+// A class takes its subject's colour when its title matches a subject
+const slotColor = title => (data.subjects.find(s => s.name.toLowerCase() === title.toLowerCase()) || {}).color || COLORS[0];
+
+function weekDays() {
+  const days = [...Array(7)].map((_, i) => ({ date: addDays(weekStart, i), allDay: [], timed: [] }));
+  const put = (i, item) => { if (i >= 0 && i < 7) days[i][item.allDay ? 'allDay' : 'timed'].push(item); };
+  for (const t of data.timetable)
+    put((t.day + 6) % 7, { kind: 'class', title: t.title, start: minutes(t.start), end: minutes(t.end), color: slotColor(t.title), src: t });
+  for (const m of data.meetings)
+    put(dayIndex(new Date(m.date + 'T00:00')), { kind: 'meeting', title: m.title, start: minutes(m.start), end: minutes(m.end), color: COLORS[3], src: m });
+  if (cal.week !== localDate(weekStart)) return days;
+  for (const e of cal.events) {
+    const from = new Date(e.start), to = new Date(e.end);
+    // Split anything that runs past midnight into one piece per day it touches
+    for (let i = Math.max(0, dayIndex(from)); i < 7; i++) {
+      const dayStart = addDays(weekStart, i), dayEnd = addDays(weekStart, i + 1);
+      if (dayStart >= to) break;
+      if (e.allDay) { put(i, { kind: 'event', allDay: true, title: e.title, color: e.color, note: e.calendar }); continue; }
+      const s = Math.max(from, dayStart), f = Math.min(to, dayEnd);
+      put(i, { kind: 'event', title: e.title, start: Math.round((s - dayStart) / 60000), end: Math.round((f - dayStart) / 60000), color: e.color, note: e.calendar });
+    }
+  }
+  for (const r of cal.reminders) {
+    const due = new Date(r.due), at = due.getHours() * 60 + due.getMinutes();
+    put(dayIndex(due), r.hasTime
+      ? { kind: 'reminder', title: r.title, start: at, end: Math.min(at + 30, 1440), color: r.color, note: r.list }
+      : { kind: 'reminder', allDay: true, title: r.title, color: r.color, note: r.list });
+  }
+  return days;
+}
+
+// Side-by-side columns for items that overlap
+function layOut(items) {
+  items.sort((a, b) => a.start - b.start || b.end - a.end);
+  let cluster = [], laneEnds = [], clusterEnd = -1;
+  const close = () => { for (const it of cluster) it.lanes = laneEnds.length; cluster = []; laneEnds = []; };
+  for (const it of items) {
+    if (it.start >= clusterEnd) close();
+    let lane = laneEnds.findIndex(end => end <= it.start);
+    if (lane < 0) lane = laneEnds.length;
+    laneEnds[lane] = it.end;
+    it.lane = lane;
+    cluster.push(it);
+    clusterEnd = Math.max(clusterEnd, it.end);
+  }
+  close();
+}
+
+function calendarNotice() {
+  if (cal.error) return el('p', { class: 'cal-note' }, `Couldn't read Apple Calendar right now (${cal.error}). Your own classes and meetings are still shown.`);
+  const off = cal.access ? ['Calendar', 'Reminders'].filter(k => cal.access[k.toLowerCase()] !== 'granted') : [];
+  if (!off.length) return null;
+  return el('p', { class: 'cal-note' }, `Homework can't see your Apple ${off.join(' or ')}. To show ${off.length > 1 ? 'them' : 'it'} here, turn Homework on in System Settings → Privacy & Security → ${off.join(' and ')}.`);
+}
+
+function slotBlock(it, firstHour, day) {
+  const own = it.kind === 'class' || it.kind === 'meeting';
+  const span = `${clock(it.start)}–${clock(Math.min(it.end, 1440))}`;
+  const height = Math.max((it.end - it.start) / 60 * HOUR, 20) - 2;
+  return el('div', {
+    class: `slot ${it.kind}` + (own ? ' own' : '') + (height < 34 ? ' short' : ''), // too short for two lines: time then title
+    style: `top:${(it.start - firstHour * 60) / 60 * HOUR}px;height:${height}px;` +
+      `left:calc(${it.lane / it.lanes * 100}% + 2px);width:calc(${100 / it.lanes}% - 4px);--c:${it.color || COLORS[0]}`,
+    title: [it.title, it.kind === 'reminder' ? clock(it.start) : span, it.note].filter(Boolean).join('\n'),
+    onclick: own ? () => openSlot(it.src, it.kind, day) : null
+  }, el('span', { class: 't' }, it.title), el('span', { class: 'h' }, it.kind === 'reminder' ? `◦ ${clock(it.start)}` : span));
+}
+
+function renderCalendar() {
+  const box = $('calendarView');
+  const days = weekDays();
+  const timed = days.flatMap(d => d.timed);
+  const firstHour = Math.min(8, ...timed.map(it => Math.floor(it.start / 60)));
+  const lastHour = Math.max(18, ...timed.map(it => Math.ceil(it.end / 60)));
+  const todayKey = today();
+  const now = new Date(), nowMins = now.getHours() * 60 + now.getMinutes();
+
+  const head = el('div', { class: 'cal-row cal-head' }, el('span'), ...days.map(d =>
+    el('div', { class: 'cal-day' + (localDate(d.date) === todayKey ? ' now' : '') },
+      el('span', {}, d.date.toLocaleDateString(undefined, { weekday: 'short' })), el('b', {}, String(d.date.getDate())))));
+  const strip = days.some(d => d.allDay.length) ? el('div', { class: 'cal-row cal-allday' }, el('span', { class: 'cal-hour' }, 'all day'),
+    ...days.map(d => el('div', {}, ...d.allDay.map(it =>
+      el('span', { class: `chip-slot ${it.kind}`, style: `--c:${it.color || COLORS[0]}`, title: [it.title, it.note].filter(Boolean).join('\n') }, it.title))))) : null;
+
+  const hours = el('div', { class: 'cal-hours' }, ...[...Array(lastHour - firstHour)].map((_, i) =>
+    el('span', { style: `top:${i * HOUR}px` }, clock((firstHour + i) * 60))));
+  const cols = days.map(d => {
+    layOut(d.timed);
+    const col = el('div', { class: 'cal-col' }, ...d.timed.map(it => slotBlock(it, firstHour, d.date)));
+    if (localDate(d.date) === todayKey && nowMins >= firstHour * 60 && nowMins <= lastHour * 60)
+      col.append(el('span', { class: 'now-line', style: `top:${(nowMins - firstHour * 60) / 60 * HOUR}px` }));
+    return col;
+  });
+  const grid = el('div', { class: 'cal-row cal-grid', style: `height:${(lastHour - firstHour) * HOUR}px;--hour:${HOUR}px` }, hours, ...cols);
+
+  const scroll = $('listCard').scrollTop;
+  box.replaceChildren(...[calendarNotice(), head, strip, grid].filter(Boolean));
+  $('listCard').scrollTop = scroll;
+  if (!data.timetable.length && !data.meetings.length && !timed.length && !strip)
+    box.append(el('p', { class: 'hint' }, 'Add your classes below. Pick "Every week" for your timetable or "Just once" for a meeting.'));
+}
+
+// Asks the helper for the shown week; the first time, macOS asks for Calendar and Reminders access
+async function refreshCalendar() {
+  const week = localDate(weekStart);
+  const res = await window.store.fetchCalendar(weekStart.toISOString(), addDays(weekStart, 7).toISOString());
+  if (week !== localDate(weekStart)) return; // moved to another week while waiting
+  cal = { week, access: res.access || null, events: res.events || [], reminders: res.reminders || [], error: res.error || null };
+  if (view === 'calendar' && !slotEditing) renderCalendar();
+}
+
+function moveWeek(n) {
+  weekStart = n ? addDays(weekStart, 7 * n) : mondayOf(new Date());
+  render();
+  if (motion()) $('calendarView').animate([{ opacity: 0, transform: `translateX(${(n || 0) * 14}px)` }, { opacity: 1, transform: 'none' }], { duration: 260, easing: EASE });
+  refreshCalendar();
+}
+$('wPrev').addEventListener('click', () => moveWeek(-1));
+$('wNext').addEventListener('click', () => moveWeek(1));
+$('wToday').addEventListener('click', () => moveWeek(0));
+
+// Calendar or Reminders changed (they fire in bursts), the window came back, or five minutes passed
+let calTimer = null;
+const calSoon = () => { clearTimeout(calTimer); calTimer = setTimeout(() => { if (view === 'calendar') refreshCalendar(); }, 400); };
+window.store.onCalendarChanged(calSoon);
+window.addEventListener('focus', calSoon);
+setInterval(calSoon, 5 * 60 * 1000);
+
+// Same fields for adding and editing; returns null (and says why) if the times don't make sense
+function readSlot(p) {
+  const end = $(p + 'End');
+  end.setCustomValidity(minutes(end.value) > minutes($(p + 'Start').value) ? '' : 'Ends before it starts');
+  if (!end.reportValidity()) return null;
+  const date = $(p + 'Date').value;
+  const base = { title: $(p + 'Title').value.trim(), start: $(p + 'Start').value, end: end.value };
+  return $(p + 'Kind').value === 'weekly' ? { ...base, day: new Date(date + 'T00:00').getDay() } : { ...base, date };
+}
+
+function storeSlot(slot, kind) {
+  (kind === 'weekly' ? data.timetable : data.meetings).push({ id: crypto.randomUUID(), ...slot });
+}
+
+$('calForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const slot = readSlot('c');
+  if (!slot || !slot.title) return;
+  storeSlot(slot, $('cKind').value);
+  $('cTitle').value = '';
+  save(); render();
+  $('cTitle').focus();
+});
+$('cEnd').addEventListener('input', e => e.target.setCustomValidity(''));
+$('sEnd').addEventListener('input', e => e.target.setCustomValidity(''));
+
+function openSlot(src, kind, day) {
+  slotEditing = { src, kind };
+  $('sTitle').value = src.title;
+  $('sKind').value = kind === 'class' ? 'weekly' : 'meeting';
+  $('sDate').value = kind === 'class' ? localDate(day) : src.date;
+  $('sStart').value = src.start;
+  $('sEnd').value = src.end;
+  $('slotDialog').returnValue = '';
+  $('slotDialog').showModal();
+}
+
+// Saving goes through the form's validation first, so a bad end time keeps the dialog open
+$('slotForm').addEventListener('submit', e => {
+  if (e.submitter && e.submitter.value === 'save' && !readSlot('s')) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
+
+$('slotDialog').addEventListener('close', () => {
+  const action = $('slotDialog').returnValue;
+  const { src, kind } = slotEditing;
+  if (action === 'save' || action === 'delete') {
+    if (kind === 'class') data.timetable = data.timetable.filter(t => t !== src);
+    else data.meetings = data.meetings.filter(m => m !== src);
+    if (action === 'save') storeSlot(readSlot('s'), $('sKind').value);
+    save();
+  }
+  slotEditing = null;
+  if (view === 'calendar') renderCalendar();
+});
 
 (async () => {
   data = Object.assign(data, await window.store.load());
@@ -349,6 +587,8 @@ $('goSubjects').addEventListener('click', () => { view = 'subjects'; render(); }
   applyTheme();
   applyLogin();
   $('fDue').value = today();
+  $('cDate').value = today();
+  weekStart = mondayOf(new Date());
   render();
-  setInterval(() => { if (view !== 'subjects' && view !== 'settings' && !editing) render(); }, 60 * 1000); // roll groups over at midnight
+  setInterval(() => { if (view !== 'subjects' && view !== 'settings' && !editing && !slotEditing) render(); }, 60 * 1000); // roll groups over at midnight
 })();

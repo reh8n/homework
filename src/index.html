@@ -13,6 +13,7 @@
       <span class="thumb nav-thumb"></span>
       <button class="nav active" data-view="today"><span class="ico">◐</span>Today</button>
       <button class="nav" data-view="upcoming"><span class="ico">◷</span>Upcoming</button>
+      <button class="nav" data-view="calendar"><span class="ico">▦</span>Calendar</button>
       <button class="nav" data-view="done"><span class="ico">✓</span>Done</button>
       <button class="nav" data-view="subjects"><span class="ico">▤</span>Subjects</button>
       <button class="nav" data-view="settings"><span class="ico">⚙</span>Settings</button>
@@ -25,16 +26,24 @@
         <p class="eyebrow" id="eyebrow"></p>
         <h1 id="title">Today</h1>
       </div>
-      <div class="pill-toggle" id="groupToggle">
-        <span class="thumb"></span>
-        <button data-group="date" class="on">Date</button>
-        <button data-group="subject">Subject</button>
+      <div class="stack">
+        <div class="pill-toggle" id="groupToggle">
+          <span class="thumb"></span>
+          <button data-group="date" class="on">Date</button>
+          <button data-group="subject">Subject</button>
+        </div>
+        <div class="week-nav gone" id="weekNav">
+          <button class="soft" id="wPrev" title="Previous week">‹</button>
+          <button class="soft" id="wToday">This week</button>
+          <button class="soft" id="wNext" title="Next week">›</button>
+        </div>
       </div>
     </header>
 
     <section class="card" id="listCard">
       <div id="list"></div>
       <div id="subjectsView" hidden></div>
+      <div id="calendarView" hidden></div>
       <div id="settingsView" hidden>
         <div class="setting">
           <span class="name">Appearance</span>
@@ -54,22 +63,39 @@
           </div>
         </div>
         <div class="setting">
+          <span class="name">iPhone alerts</span>
+          <span class="meta" id="syncState"></span>
+        </div>
+        <div class="setting">
           <span class="name">Subjects</span>
           <button class="soft" id="goSubjects">Manage subjects</button>
         </div>
-        <p class="hint">Reminders arrive at 7pm the evening before a task is due. Closing the window keeps Homework running in the menu bar; choose Quit from its menu-bar icon to stop reminders.</p>
+        <p class="hint">Reminders arrive at 7pm the evening before a task is due. Tasks are also copied to a "Homework" list in Apple Reminders, so your iPhone alerts at the same time; ticking one off on either side ticks it on both. Closing the window keeps Homework running in the menu bar; choose Quit from its menu-bar icon to stop reminders.</p>
       </div>
     </section>
 
-    <form class="bar" id="addForm" autocomplete="off">
-      <input class="field grow" id="fTitle" placeholder="Add a task…" required>
-      <select class="field" id="fSubject"></select>
-      <select class="field" id="fType">
-        <option>Homework</option><option>Test</option><option>Project</option>
-      </select>
-      <input class="field" type="date" id="fDue" required>
-      <button class="round" type="submit" title="Add">+</button>
-    </form>
+    <div class="stack">
+      <form class="bar" id="addForm" autocomplete="off">
+        <input class="field grow" id="fTitle" placeholder="Add a task…" required>
+        <select class="field" id="fSubject"></select>
+        <select class="field" id="fType">
+          <option>Homework</option><option>Test</option><option>Project</option>
+        </select>
+        <input class="field" type="date" id="fDue" required>
+        <button class="round" type="submit" title="Add">+</button>
+      </form>
+
+      <form class="bar gone" id="calForm" autocomplete="off">
+        <input class="field grow" id="cTitle" placeholder="Add a class or meeting…" required>
+        <select class="field" id="cKind">
+          <option value="weekly">Every week</option><option value="meeting">Just once</option>
+        </select>
+        <input class="field" type="date" id="cDate" required title="For weekly classes, any date on the right weekday">
+        <input class="field" type="time" id="cStart" value="09:00" required>
+        <input class="field" type="time" id="cEnd" value="10:00" required>
+        <button class="round" type="submit" title="Add">+</button>
+      </form>
+    </div>
   </main>
 
   <dialog id="editDialog" class="card">
@@ -83,6 +109,23 @@
       <textarea class="field" id="eNotes" rows="4" placeholder="Notes"></textarea>
       <div class="row end">
         <button class="soft" value="delete" id="eDelete" formnovalidate>Delete</button>
+        <button class="soft" value="cancel" formnovalidate>Cancel</button>
+        <button class="soft strong" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="slotDialog" class="card">
+    <form method="dialog" id="slotForm">
+      <input class="field" id="sTitle" required>
+      <div class="row">
+        <select class="field" id="sKind"><option value="weekly">Every week</option><option value="meeting">Just once</option></select>
+        <input class="field" type="date" id="sDate" required>
+        <input class="field" type="time" id="sStart" required>
+        <input class="field" type="time" id="sEnd" required>
+      </div>
+      <div class="row end">
+        <button class="soft" value="delete" id="sDelete" formnovalidate>Delete</button>
         <button class="soft" value="cancel" formnovalidate>Cancel</button>
         <button class="soft strong" value="save">Save</button>
       </div>

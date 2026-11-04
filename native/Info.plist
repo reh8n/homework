@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.reh8n.homework.calhelper</string>
+  <key>CFBundleName</key><string>Homework Calendar Helper</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Homework shows your Apple Calendar events in its Calendar tab.</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>Homework shows your dated reminders in its Calendar tab and keeps your tasks in a “Homework” Reminders list so they reach your iPhone.</string>
+</dict>
+</plist>
