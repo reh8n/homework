@@ -4,3 +4,6 @@ dist/
 images.jpeg
 native/bin/
 ._*
+
+# Mac App Store provisioning profile (download from your Apple Developer account)
+build/embedded.provisionprofile

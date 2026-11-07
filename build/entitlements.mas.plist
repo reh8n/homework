@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Every Mac App Store app runs in the App Sandbox -->
+  <key>com.apple.security.app-sandbox</key><true/>
+  <!-- Electron's processes talk to each other through this group. TEAMID is your 10-character Apple Team ID. -->
+  <key>com.apple.security.application-groups</key>
+  <array>
+    <string>TEAMID.com.reh8n.homework</string>
+  </array>
+  <!-- The Calendar tab and the Reminders sync (EventKit covers both) -->
+  <key>com.apple.security.personal-information.calendars</key><true/>
+</dict>
+</plist>
