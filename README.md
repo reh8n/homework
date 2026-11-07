@@ -18,6 +18,10 @@ Requires a Mac with Apple Silicon (M1 or later). Intel Macs aren't supported.
 
 You only have to do this once.
 
+## Updates
+
+Homework checks GitHub for a new release when it starts and every six hours. When one is out, you get a notification and a **Download Homework x.y.z…** item in the menu bar menu. Either one opens the release page. Download the new DMG and drag it into Applications to replace the old version. Your tasks are kept.
+
 ## Build from source
 
 You need [Node.js](https://nodejs.org) 18 or later.
@@ -27,6 +31,14 @@ npm install     # install dependencies
 npm start       # run the app in development
 npm run dist    # build dist/Homework-<version>-arm64.dmg
 ```
+
+## Releasing a new version
+
+1. Raise `version` in `package.json` (e.g. `1.3.3` → `1.3.4`).
+2. Commit and push to `main`.
+3. Run `npm run release`. It builds the DMG and publishes it as a GitHub release tagged `v<version>`, with notes generated from the commits.
+
+You need the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`). Installed copies pick up the release within six hours.
 
 ## License
 

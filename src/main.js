@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, Notification, nativeTheme, Tray, Menu, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, nativeTheme, Tray, Menu, powerMonitor, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { startUpdateChecks } = require('./updates');
 
 const dataFile = () => path.join(app.getPath('userData'), 'tasks.json');
 // Kept apart from tasks.json so the window's saves never overwrite it
@@ -61,10 +62,16 @@ function showWindow(then) {
 function createTray() {
   tray = new Tray(path.join(__dirname, 'trayTemplate.png'));
   tray.setToolTip('Homework');
+  setTrayMenu();
+}
+
+// update: { version, url } once a newer release is found
+function setTrayMenu(update) {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open Homework', click: () => showWindow() },
     { label: 'Add task…', click: () => showWindow('focus-add') },
     { type: 'separator' },
+    ...(update ? [{ label: `Download Homework ${update.version}…`, click: () => shell.openExternal(update.url) }, { type: 'separator' }] : []),
     { label: 'Quit Homework', click: () => app.quit() }
   ]));
 }
@@ -217,6 +224,7 @@ app.whenReady().then(() => {
   // Only syncs if Reminders access was already given; the prompt itself waits for the Calendar tab
   syncReminders();
   setInterval(syncReminders, 5 * 60 * 1000);
+  startUpdateChecks(setTrayMenu);
   app.on('activate', () => showWindow());
 });
 
